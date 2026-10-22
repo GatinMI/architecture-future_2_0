@@ -1,0 +1,8 @@
+# Локальное состояние и кэш Terraform
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+terraform.tfstate.d/
+crash.log
+crash.*.log
+*.tfplan

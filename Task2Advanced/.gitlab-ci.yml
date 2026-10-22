@@ -1,0 +1,163 @@
+# CI/CD-пайплайн развёртывания инфраструктуры Yandex Cloud.
+#
+# Стадии:
+#   lint    - форматирование (terraform fmt -check)
+#   plan    - автоматически на push в main: init (с удалённым backend),
+#             validate, plan; plan-файл сохраняется артефактом
+#   apply   - вручную (кнопка в UI = approval): применяет сохранённый plan
+#   destroy - вручную: уничтожает окружение
+#
+# Секреты (эндпоинт хранилища, ключи S3, токен YC) в этом файле и в
+# репозитории в целом отсутствуют: они задаются как masked/protected
+# CI/CD-переменные проекта в GitLab (набор описан в README.md).
+
+image: future20/terraform-yc:1.5.7
+
+# Пайплайн ходит только по основной ветке; все изменения - через коммиты в main
+workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+
+variables:
+  TF_IN_AUTOMATION: "1"
+  TF_INPUT: "0"
+
+default:
+  interruptible: true
+
+stages:
+  - lint
+  - plan
+  - apply
+  - destroy
+
+lint:
+  stage: lint
+  script:
+    - terraform fmt -check -recursive
+
+# ------------------------- dev -------------------------
+
+plan:dev:
+  stage: plan
+  script:
+    # init подключает удалённый backend (S3); endpoint приходит из CI-переменной,
+    # ключи хранилища - из AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY
+    - terraform -chdir=envs/dev init -backend-config=endpoint="$TF_STATE_ENDPOINT"
+    - terraform -chdir=envs/dev validate
+    # plan-файл - артефакт: apply применяет ровно то, что здесь было показано
+    - terraform -chdir=envs/dev plan -out=tfplan.dev -var-file=dev.tfvars
+  artifacts:
+    paths:
+      - envs/dev/tfplan.dev
+    expire_in: 1 day
+
+apply:dev:
+  stage: apply
+  needs:
+    - job: plan:dev
+      artifacts: true
+  when: manual
+  allow_failure: false
+  resource_group: terraform-dev
+  environment:
+    name: dev
+  script:
+    - terraform -chdir=envs/dev init -backend-config=endpoint="$TF_STATE_ENDPOINT"
+    - terraform -chdir=envs/dev apply -auto-approve tfplan.dev
+
+destroy:dev:
+  stage: destroy
+  needs:
+    - job: plan:dev
+      artifacts: false
+  when: manual
+  allow_failure: false
+  resource_group: terraform-dev
+  environment:
+    name: dev
+  script:
+    - terraform -chdir=envs/dev init -backend-config=endpoint="$TF_STATE_ENDPOINT"
+    - terraform -chdir=envs/dev destroy -auto-approve -var-file=dev.tfvars
+
+# ------------------------- stage -----------------------
+
+plan:stage:
+  stage: plan
+  script:
+    - terraform -chdir=envs/stage init -backend-config=endpoint="$TF_STATE_ENDPOINT"
+    - terraform -chdir=envs/stage validate
+    - terraform -chdir=envs/stage plan -out=tfplan.stage -var-file=stage.tfvars
+  artifacts:
+    paths:
+      - envs/stage/tfplan.stage
+    expire_in: 1 day
+
+apply:stage:
+  stage: apply
+  needs:
+    - job: plan:stage
+      artifacts: true
+  when: manual
+  allow_failure: false
+  resource_group: terraform-stage
+  environment:
+    name: stage
+  script:
+    - terraform -chdir=envs/stage init -backend-config=endpoint="$TF_STATE_ENDPOINT"
+    - terraform -chdir=envs/stage apply -auto-approve tfplan.stage
+
+destroy:stage:
+  stage: destroy
+  needs:
+    - job: plan:stage
+      artifacts: false
+  when: manual
+  allow_failure: false
+  resource_group: terraform-stage
+  environment:
+    name: stage
+  script:
+    - terraform -chdir=envs/stage init -backend-config=endpoint="$TF_STATE_ENDPOINT"
+    - terraform -chdir=envs/stage destroy -auto-approve -var-file=stage.tfvars
+
+# ------------------------- prod ------------------------
+
+plan:prod:
+  stage: plan
+  script:
+    - terraform -chdir=envs/prod init -backend-config=endpoint="$TF_STATE_ENDPOINT"
+    - terraform -chdir=envs/prod validate
+    - terraform -chdir=envs/prod plan -out=tfplan.prod -var-file=prod.tfvars
+  artifacts:
+    paths:
+      - envs/prod/tfplan.prod
+    expire_in: 1 day
+
+apply:prod:
+  stage: apply
+  needs:
+    - job: plan:prod
+      artifacts: true
+  when: manual
+  allow_failure: false
+  resource_group: terraform-prod
+  environment:
+    name: prod
+  script:
+    - terraform -chdir=envs/prod init -backend-config=endpoint="$TF_STATE_ENDPOINT"
+    - terraform -chdir=envs/prod apply -auto-approve tfplan.prod
+
+destroy:prod:
+  stage: destroy
+  needs:
+    - job: plan:prod
+      artifacts: false
+  when: manual
+  allow_failure: false
+  resource_group: terraform-prod
+  environment:
+    name: prod
+  script:
+    - terraform -chdir=envs/prod init -backend-config=endpoint="$TF_STATE_ENDPOINT"
+    - terraform -chdir=envs/prod destroy -auto-approve -var-file=prod.tfvars

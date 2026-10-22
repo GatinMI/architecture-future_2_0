@@ -1,0 +1,11 @@
+# Кэш провайдеров и локальные артефакты Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+tfplan*
+
+# Локальное окружение для теста (логи, bootstrap-токен GitLab)
+local-test/*.log
+local-test/.token

@@ -1,0 +1,78 @@
+@startuml
+' Bounded contexts «Будущее 2.0» - context map (DDD)
+skinparam defaultFontName "DejaVu Sans"
+skinparam rectangle {
+  roundCorner 10
+  BorderThickness 1
+}
+skinparam nodesep 40
+skinparam ranksep 55
+
+title «Будущее 2.0» - bounded contexts (context map)\nЦвета: core-домены (оранжевый), поддерживающие (синий), generic (зелёный), легаси/изоляция (серый/красный, пунктир)
+
+rectangle "Мастер-данные" as md #dae8fc {
+  rectangle "Агрегаты: Client, Employee" as md_a #fff
+}
+
+rectangle "Пациентский поток (клиники)" as pat #f5cba7 {
+  rectangle "Агрегаты: Patient, Visit, TreatmentPlan" as pat_a #fff
+}
+
+rectangle "ИИ-диагностика (медицинские данные)" as ai #f5cba7 {
+  rectangle "Агрегат: Examination" as ai_a #fff
+}
+
+rectangle "Финтех (банк)" as fin #f5cba7 {
+  rectangle "Агрегаты: CreditContract, Account, Payment" as fin_a #fff
+}
+
+rectangle "Финансовая отчётность (ГО)" as fr #dae8fc {
+  rectangle "Агрегат: FinancialPeriod" as fr_a #fff
+}
+
+rectangle "Фармкомпании (новое)" as ph #d5e8d4 {
+  rectangle "Агрегат: PharmaOrder" as ph_a #fff
+}
+
+rectangle "Медэлектроника (новое)" as dev #d5e8d4 {
+  rectangle "Агрегат: Device" as dev_a #fff
+}
+
+rectangle "Витрина данных (BI-домен)" as show #d5e8d4 {
+  rectangle "Read-модели (марты), семантический слой" as show_a #fff
+}
+
+rectangle "Легаси: DWH (SQL Server 2008) + ESB (Camel)" as leg #eeeeee;line:dashed {
+  rectangle "Бизнес-логика в представлениях и Camel-маршрутах" as leg_a #fff
+}
+
+rectangle "Медицинская зона (медкарты, снимки, результаты)" as med #f8cecc;line:dashed {
+  rectangle "Хранение результатов исследований, строгий доступ" as med_a #fff
+}
+
+md --> pat : Customer/Supplier
+md --> fin : Customer/Supplier\n(publication: ClientReference)
+pat --> ai : Customer/Supplier\n(publication: ExaminationRequested)
+fin --> fr : Customer/Supplier
+pat --> fr : Customer/Supplier\n(publication: VisitCompleted)
+ph --> fr : Customer/Supplier\n(publication: PharmaOrderPlaced)
+
+fin ..> show : Conformist\n(публичные события домена)
+pat ..> show : Conformist
+fr ..> show : Conformist
+ph ..> show : Conformist
+dev ..> show : Conformist
+
+ai --> med : владение результатами\n(доступ - только ИИ-контекст)
+
+leg ..> fr : ACL-мост (CDC)\nвывод к 3-му году
+leg ..> ai : ACL-мост (Camel)\nвывод к 3-му году
+
+note bottom of show
+  Витрина - подписчик всех доменов,
+  кроме медицинской зоны:
+  медкарты, истории и результаты
+  исследований в неё не попадают.
+end note
+
+@enduml

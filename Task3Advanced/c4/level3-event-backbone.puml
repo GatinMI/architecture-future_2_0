@@ -1,0 +1,51 @@
+@startuml
+!define RELATIVE_INCLUDE
+!include C4_Component.puml
+
+title Событийный каркас (Kafka + поддержка) - компоненты\n(C4, уровень 3; уровень 2 - см. level2-containers)
+
+AddComponentTag("core", $legendText="Компоненты событийного каркаса")
+AddComponentTag("bridge", $borderStyle="dashed", $legendText="Мост совместимости (легаси, выводится)")
+
+System_Ext(fintech, "Финтех-сервисы (банк)", "Go/Java")
+System_Ext(intsvc, "Внутренние сервисы", "Клиники, персонал, инвентарь")
+System_Ext(newdom, "Новые домены", "Фармкомпании, медэлектроника (к 3-му году)")
+System_Ext(dwh, "DWH на SQL Server 2008 (легаси)")
+System_Ext(esb, "Сервисная шина Camel (легаси)")
+System_Ext(ai, "ИИ-сервисы (медицинская зона)")
+
+Container_Boundary(bus, "Событийный каркас (event backbone)") {
+  Component(topics, "Доменные топики", "finance.*, patient.*, operations.*, iot.*", "Партиционирование по домену, политики retention", $tags="core")
+  Component(sreg, "Регистр схем", "Confluent Schema Registry", "Каталог схем, валидация контракта при публикации, версии", $tags="core")
+  Component(cdc, "CDC-мост", "Debezium", "Изменения DWH → события; мост совместимости", $tags="bridge")
+  Component(acl, "ESB-адаптер (ACL)", "Camel-маршруты → доменные события", "Антикоррупционный слой к шине Camel; мост совместимости", $tags="bridge")
+  Component(dlq, "DLQ и реплей", "dead letter topic + consumer", "Недоставленные/брак-события: алерты, повторная обработка", $tags="core")
+  Component(sink, "Лендинг в data-озеро", "Kafka Connect / Flink", "Зеркало событий в raw-зону (Parquet/Iceberg)", $tags="core")
+  Component(mat, "Потоковая материализация", "Apache Flink", "Агрегаты и очистка, streaming-витрины (near real-time)", $tags="core")
+  Component(storage, "Бэкпрессур и tiered storage", "квоты + тирированное хранение", "Ограничение потребления и стоимость хранения", $tags="core")
+}
+
+ContainerDb(lake, "Data-озеро (raw)", "Yandex Data Lake / YOS")
+ContainerDb(ch, "Аналитический склад", "Yandex Managed ClickHouse")
+Container(obs, "Наблюдаемость", "Prometheus + Grafana")
+
+Rel(fintech, topics, "Публикуют финансовые события")
+Rel(intsvc, topics, "Публикуют операционные события")
+Rel(newdom, topics, "Публикуют события (фарм, устройства) - масштабирование")
+Rel(sreg, topics, "Валидация контракта при публикации")
+Rel(topics, mat, "Потоки для агрегации")
+Rel(mat, ch, "Streaming-витрины (near real-time)")
+Rel(topics, sink, "Raw-события")
+Rel(sink, lake, "Parquet/Iceberg")
+Rel(topics, dlq, "Брак по схеме / недоставленное")
+Rel(dlq, obs, "Алерты, реплей")
+Rel(storage, topics, "Квоты, tiered storage")
+Rel(topics, ai, "Пациентский поток (медицинская зона)")
+
+dwh .> cdc : CDC (WAL / change log)
+esb .> acl : Camel-маршруты
+cdc --> topics : События из DWH (мост)
+acl --> topics : События из ESB (мост)
+
+SHOW_LEGEND()
+@enduml
