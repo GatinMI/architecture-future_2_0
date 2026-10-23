@@ -1,0 +1,81 @@
+@startuml
+!define RELATIVE_INCLUDE
+!include C4_Container.puml
+
+title «Будущее 2.0» - целевая архитектура платформы данных\n(C4, уровень 2: контейнеры; горизонт 3 года, облако - Yandex Cloud)
+
+' Лентаги (легенда строится автоматически)
+AddSystemTag("legacy", $borderStyle="dashed", $legendText="Легаси - «мост совместимости», выводятся в 2026–2029")
+AddSystemTag("newdom", $legendText="Новое направление (интегрируется к 3-му году)")
+AddContainerTag("built", $legendText="Строится в рамках трансформации (новый элемент)")
+AddPersonTag("user", $legendText="Пользователь (person)")
+
+Person(analyst, "Бизнес-пользователь / аналитик", "Пользуется витриной в рамках своего уровня доступа")
+Person(ops, "Оператор клиники", "Ввод медицинских данных и снимков")
+
+System_Boundary(legacy, "Легаси - «мосты совместимости» (выводятся)") {
+  System(pbu, "Клиентский интерфейс оператора (PowerBuilder)", "Медицинские данные, снимки", $tags="legacy")
+  System(dwh, "DWH на SQL Server 2008", "Клиенты, финансы, отчётность; бизнес-логика в представлениях и хранимых процедурах", $tags="legacy")
+  System(esb, "Сервисная шина (Apache Camel)", "Точечные интеграции AI и финтеха", $tags="legacy")
+  System(pbi, "Power BI", "Кастомные легаси-отчёты поверх DWH", $tags="legacy")
+}
+
+System_Boundary(cloud, "Yandex Cloud - событийная платформа данных (целевое состояние)") {
+  Container(ingest, "Инжест и антикоррупционный слой", "Debezium + адаптер ESB (ACL)", "Загрузка данных и событий: CDC из DWH, адаптер Camel-маршрутов, batch-лоадеры новых источников")
+  ContainerQueue(kafka, "Событийная шина", "Apache Kafka", "Доменные топики (finance.*, patient.*, operations.*, iot.*), DLQ, tiered storage")
+  Container(sreg, "Регистр схем", "Confluent Schema Registry", "Каталог схем, валидация контракта при публикации, версионирование")
+  Container(flink, "Потоковая обработка", "Apache Flink", "Очистка, агрегирование, потоковые витрины (near real-time)")
+  ContainerDb(lake, "Data-озеро (raw-зона)", "Yandex Data Lake / YOS (S3)", "Все исходные данные и события в Parquet/Iceberg")
+  Container(dbt, "Трансформации и метрики", "dbt + оркестратор", "Medallion-слои, единые определения метрик, micro-batch")
+  ContainerDb(ch, "Аналитический склад", "Yandex Managed ClickHouse", "Serving-слой для витрины и BI-запросов")
+  Container(show, "Витрина данных (портал самообслуживания)", "Superset + семантический слой", "Дашборды, свои отчёты, API отчётов; RBAC/RLS; медицинские данные вне витрины", $tags="built")
+  Container(catalog, "Каталог метаданных и качество данных", "DataHub + проверки", "Lineage, SLA/freshness, карантин брака")
+  Container(idp, "Идентификация и доступы", "OIDC / Yandex IAM", "SSO, RBAC, row-level access по доменам")
+  Container(obs, "Наблюдаемость", "Prometheus + Grafana", "Lag Kafka, DLQ, SLO, мониторинг затрат")
+}
+
+System_Boundary(domains, "Бизнес-домены (источники и потребители событий)") {
+  System(fintech, "Финтех-сервисы (банк)", "Go/Java; платежи, кредиты, счета")
+  System(ai, "ИИ-сервисы (медицина)", "Python; диагностика, анализ исследований")
+  System(intsvc, "Внутренние сервисы (ГО, клиники)", "Управление клиниками, персонал, инвентаризация")
+  System(pharma, "Фармкомпании (новое)", "Третье направление; к 3-му году - свои события и data-продукт", $tags="newdom")
+  System(devices, "Медэлектроника (новое)", "Третье направление; данные устройств и телеметрия", $tags="newdom")
+}
+
+System_Ext(medzone, "Медицинская зона (изолированная)", "Медкарты, истории болезни, результаты исследований - вне витрины, доступ через ИИ-сервисы")
+
+' --- легаси-потоки (текущая схема, остаются как мосты) ---
+Rel(ops, pbu, "Работа с пациентами")
+Rel(pbu, dwh, "Медицинские данные, снимки")
+Rel(esb, dwh, "Внутренние финансы, управление клиниками")
+Rel(pbi, dwh, "Легаси-отчёты")
+Rel_D(esb, ai, "Медицинские данные (до перехода на события)")
+Rel_D(esb, fintech, "Финансовые данные (до перехода на события)")
+
+' --- мосты совместимости: легаси -> платформа ---
+dwh .> ingest : CDC-изменения (мост)
+esb .> ingest : Адаптер Camel-маршрутов (мост, ACL)
+pbi .> show : Power BI заменяется витриной (к 3-му году)
+
+' --- целевые событийные потоки ---
+Rel(fintech, kafka, "Финансовые события: платёж, кредитный договор, счёт")
+Rel(intsvc, kafka, "Операционные события: визит, персонал, инвентарь")
+Rel(ai, kafka, "ИИ-события: исследование пройдено, модель использована")
+Rel(pharma, kafka, "Новые: события фармкомпаний")
+Rel(devices, kafka, "Новые: данные устройств, телеметрия")
+Rel(medzone, ai, "Медицинские данные и снимки (изолированная зона)")
+
+' --- внутри платформы ---
+Rel(kafka, flink, "Потоки событий")
+Rel(flink, ch, "Потоковые витрины (near real-time)")
+Rel(kafka, lake, "Зеркало raw-событий")
+Rel(lake, dbt, "Raw-зона → трансформации")
+Rel(dbt, ch, "Метрики и агрегаты (micro-batch)")
+Rel(ch, show, "Serving-слой витрины")
+Rel(analyst, show, "Самообслуживание: отчёты и срезы")
+Rel(idp, show, "SSO, RBAC/RLS")
+Rel(catalog, show, "Метаданные, качество, SLA")
+Rel(obs, kafka, "Мониторинг, DLQ, затраты")
+
+SHOW_LEGEND()
+@enduml

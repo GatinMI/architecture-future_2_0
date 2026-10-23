@@ -1,0 +1,123 @@
+@startuml
+' «Будущее 2.0» - событийная архитектура (event storming, эквивалент):
+' источники событий -> событийный бэкбон -> подписчики
+skinparam defaultFontName "DejaVu Sans"
+skinparam rectangle {
+  roundCorner 8
+  BorderThickness 1
+}
+skinparam nodesep 25
+skinparam ranksep 55
+
+title «Будущее 2.0» - событийная архитектура (Event Storming)\nИсточники событий -> событийный бэкбон -> подписчики (целевое состояние, 3 года)
+
+' ================= ИСТОЧНИКИ (верхний ряд) =================
+
+rectangle "Мастер-данные" as src_md #dae8fc {
+  rectangle "Агрегаты: Client, Employee" as src_md_ag #FFF2CC
+  rectangle "Клиент зарегистрирован" as e_client_reg #F8CBAD
+  rectangle "Профиль клиента обновлён" as e_client_upd #F8CBAD
+  rectangle "Сотрудник зарегистрирован" as e_emp #F8CBAD
+}
+
+rectangle "Пациентский поток (клиники)" as src_pat #f5cba7 {
+  rectangle "Агрегаты: Patient, Visit, TreatmentPlan" as src_pat_ag #FFF2CC
+  rectangle "Пациент зарегистрирован" as e_pat_reg #F8CBAD
+  rectangle "Визит запланирован" as e_visit_sch #F8CBAD
+  rectangle "Визит завершён" as e_visit_done #F8CBAD
+  rectangle "Исследование запрошено" as e_exam_req #F8CBAD
+}
+
+rectangle "Финтех (банк)" as src_fin #f5cba7 {
+  rectangle "Агрегаты: CreditContract, Account, Payment" as src_fin_ag #FFF2CC
+  rectangle "Кредитный договор создан" as e_credit #F8CBAD
+  rectangle "Счёт открыт" as e_account #F8CBAD
+  rectangle "Платёж выполнен" as e_payment #F8CBAD
+}
+
+rectangle "ИИ-диагностика (медицина)" as src_ai #f5cba7 {
+  rectangle "Агрегат: Examination" as src_ai_ag #FFF2CC
+  rectangle "Исследование ИИ пройдено" as e_ai_done #F8CBAD
+}
+
+rectangle "Фин. отчётность (ГО)" as src_fr #dae8fc {
+  rectangle "Агрегат: FinancialPeriod" as src_fr_ag #FFF2CC
+  rectangle "Период отчётности закрыт" as e_period #F8CBAD
+}
+
+rectangle "Фарм (новое)" as src_ph #d5e8d4 {
+  rectangle "Агрегат: PharmaOrder" as src_ph_ag #FFF2CC
+  rectangle "Фарм-заказ размещён" as e_pharma #F8CBAD
+}
+
+rectangle "Медэлектроника (новое)" as src_dev #d5e8d4 {
+  rectangle "Агрегат: Device" as src_dev_ag #FFF2CC
+  rectangle "Устройство введено в эксплуатацию" as e_device #F8CBAD
+}
+
+rectangle "Легаси - мосты совместимости" as src_leg #eeeeee;line:dashed {
+  rectangle "DWH (SQL 2008) - CDC" as e_leg1 #EEEEEE
+  rectangle "ESB (Camel) - ACL-адаптер" as e_leg2 #EEEEEE
+}
+
+' ================= БЭКБОН =================
+
+rectangle "Событийный бэкбон: Apache Kafka + Schema Registry (каталог схем) + DLQ\n(см. целевую архитектуру, Task3Advanced)" as bus #dae8fc;line:4472C4 {
+}
+
+' ================= ПОДПИСЧИКИ (нижний ряд) =================
+
+rectangle "Финтех (банк)" as sub_fin #f5cba7 {
+  rectangle "Подписки: Клиент зарегистрирован, Профиль клиента обновлён" as sub_fin_t #fff
+}
+
+rectangle "ИИ-диагностика (медицина)" as sub_ai #f5cba7 {
+  rectangle "Подписки: Исследование запрошено, Визит завершён" as sub_ai_t #fff
+}
+
+rectangle "Пациентский поток (клиники)" as sub_pat #f5cba7 {
+  rectangle "Подписка: Исследование ИИ пройдено (результат - врачу в визит; клиника видит только статус)" as sub_pat_t #fff
+}
+
+rectangle "Фин. отчётность (ГО)" as sub_fr #dae8fc {
+  rectangle "Подписки: Кредитный договор создан, Платёж выполнен, Визит завершён (+ легаси из DWH до миграции)" as sub_fr_t #fff
+}
+
+rectangle "Витрина данных (BI)" as sub_show #E2EFDA;line:82b366 {
+  rectangle "Подписка: на ВСЕ события доменов, кроме «Исследование ИИ пройдено»\n(read-модели: марты по доменам, семантический слой, RBAC/RLS)" as sub_show_t #D5E8D4
+}
+
+' ================= СВЯЗИ =================
+
+src_md --> bus : публикует
+src_pat --> bus : публикует
+src_fin --> bus : публикует
+src_ai --> bus : публикует
+src_fr --> bus : публикует
+src_ph --> bus : публикует
+src_dev --> bus : публикует
+src_leg .> bus : legacy-данные (мосты,\nвывод к 3-му году)
+
+bus --> sub_fin : подписывает
+bus --> sub_ai : подписывает
+bus --> sub_pat : подписывает
+bus --> sub_fr : подписывает
+bus --> sub_show : подписывает
+
+note right of e_ai_done
+  Клинический результат
+  (диагноз, снимки) НЕ публикуется -
+  остаётся в медицинской зоне
+  (см. bounded-contexts)
+end note
+
+legend right
+  = ЛЕГЕНДА
+  <back:#F8CBAD>      </back> доменное событие (прошедшее время) - публикует только домен, в котором оно произошло
+  <back:#FFF2CC>      </back> агрегаты контекста (границы, инварианты, ключи - aggregates.md)
+  <back:#EEEEEE>      </back> <font:strikethrough>мосты совместимости (легаси, выводятся к 3-му году)</font>
+  <back:#D5E8D4>      </back> витрина - подписчик всех доменов, кроме медицинской зоны
+  Полный каталог событий с контрактами - events.md
+endlegend
+
+@enduml

@@ -1,0 +1,66 @@
+@startuml
+left to right direction
+skinparam defaultFontName "DejaVu Sans"
+skinparam rectangle {
+  roundCorner 12
+  BorderThickness 2
+}
+skinparam nodesep 30
+skinparam ranksep 40
+
+title Роадмап внедрения Data Mesh - «Будущее 2.0» (36 месяцев с ноября 2026)
+
+rectangle "ФАЗА 1: Фундамент (0-3 мес.)" as P1 #dae8fc;line:4472C4 {
+  rectangle "Роли: DPO, Data Engineer, BI" as P1a #fff
+  rectangle "Контракты событий, каталог, SLA" as P1b #fff
+  rectangle "Бэкбон: Kafka + Schema Registry + DLQ" as P1c #fff
+  rectangle "dbt-проект, тесты качества" as P1d #fff
+}
+
+rectangle "ФАЗА 2: Пилот - Финтех (3-9 мес.)" as P2 #d5e8d4;line:82b366 {
+  rectangle "Data-продукт «Финтех»: марты" as P2a #fff
+  rectangle "Витрина Superset: отчёты банка" as P2b #fff
+  rectangle "Dual-run, сверка цифр, cutover" as P2c #fff
+  rectangle "Веха: банк полностью на витрине" as P2d #f8cecc
+}
+
+rectangle "ФАЗА 3: Масштабирование (9-18 мес.)" as P3 #f5cba7;line:D4920A {
+  rectangle "Data-продукт «Пациентский поток»" as P3a #fff
+  rectangle "Data-продукт «Финотчётность ГО»" as P3b #fff
+  rectangle "Data contracts - обязательный стандарт" as P3c #fff
+}
+
+rectangle "ФАЗА 4: Новые домены и регионы (18-36 мес.)" as P4 #e1d5e7;line:9673A6 {
+  rectangle "Data-продукт «Фарм»" as P4a #fff
+  rectangle "Data-продукт «Медэлектроника»" as P4b #fff
+  rectangle "Регионы: data residency, локальные марты" as P4c #fff
+  rectangle "Монетизация ИИ: API моделей, MLOps" as P4d #fff
+}
+
+rectangle "Сквозная поддержка доменов (18-36 мес.)" as P5 #FFF2CC;line:996600 {
+  rectangle "Platform SRE: on-call, retention, Tiered Storage" as P5a #fff
+  rectangle "Data Steward: SLA, аудит качества" as P5b #fff
+}
+
+P1 --> P2 : 3 мес.
+P2 --> P3 : 9 мес.
+P3 --> P4 : 18 мес.
+P3 --> P5 : 18 мес.
+
+legend right
+  = РОЛИ
+  Data Product Owner: с фазы 1
+  Data Engineer (платформа): с фазы 1
+  Data Engineer (домен): с фазы 1
+  BI-аналитик: с фазы 2
+  Data Steward: с фазы 3
+  Platform SRE: с фазы 4
+  ----
+  = KPI
+  Time-to-market отчёта: часы (было - дни)
+  >70% отчётов на витрине
+  Подключение нового домена < 3 мес.
+  SLA-соблюдение > 95%
+endlegend
+
+@enduml

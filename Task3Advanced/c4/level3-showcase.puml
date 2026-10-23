@@ -1,0 +1,46 @@
+@startuml
+!define RELATIVE_INCLUDE
+!include C4_Component.puml
+
+title Витрина данных (портал самообслуживания) - компоненты\n(C4, уровень 3)
+
+' Легенда
+AddComponentTag("core", $legendText="Компоненты портала (новый элемент)")
+AddContainerTag("upstream", $legendText="Источники данных (установленный порядок)")
+
+Person(analyst, "Бизнес-пользователь / аналитик", "Сотрудник домена: финансы, клиники, ИИ")
+
+Container_Boundary(show, "Витрина данных (портал самообслуживания)") {
+  Component(bi, "BI-фронтенд", "Superset / Metabase", "Дашборды, ad-hoc-запросы, конструктор собственных отчётов", $tags="core")
+  Component(sem, "Семантический / метрический слой", "dbt Semantic Layer / Cube", "Единые определения метрик, измерений и бизнес-терминов: «платёж», «активная кредитная задолженность» и т.д.", $tags="core")
+  Component(qs, "Сервис запросов", "ClickHouse HTTP API + кэш результатов", "OLAP-запросы к складу, кэширование типовых срезов", $tags="core")
+  Component(auth, "Управление доступом", "OIDC + движок политик", "RBAC: домен × роль; RLS: фильтры строк по организации и географии", $tags="core")
+  Component(dq, "Качество данных и SLA", "dbt tests / Great Expectations", "Свежесть, полнота, консистентность; брак не попадает в витрину (карантин)", $tags="core")
+  Component(api, "API отчётов", "REST", "Встраивание отчётов в бизнес-системы, выгрузка", $tags="core")
+}
+
+Container(flink, "Потоковая материализация", "Apache Flink")
+Container(dbt, "Трансформации", "dbt + оркестратор", $tags="upstream")
+ContainerDb(ch, "Аналитический склад", "Yandex Managed ClickHouse", $tags="upstream")
+Container(catalog, "Каталог метаданных", "DataHub", $tags="upstream")
+System_Ext(fintechsys, "Финтех-системы", "Go/Java")
+
+Rel(analyst, bi, "Дашборды и свои отчёты - в рамках своего уровня доступа")
+Rel(auth, bi, "Аутентификация, фильтры строк (RLS)")
+Rel(sem, qs, "Единые метрики и измерения")
+Rel(dq, qs, "SLA до публикации: только проверенные данные")
+Rel(flink, qs, "Near real-time данные (потоковые витрины)")
+Rel(dbt, qs, "Метрики и агрегаты (micro-batch)")
+Rel(qs, ch, "OLAP-запросы")
+Rel(catalog, sem, "Бизнес-метаданные, lineage")
+Rel(api, fintechsys, "Встраивание отчётов, выгрузка данных")
+
+Note right of qs
+  Медкарты, истории болезни и результаты
+  исследований НЕ входят в витрину:
+  это медицинская зона с изолированным
+  доступом (потребитель - ИИ-сервисы).
+end Note
+
+SHOW_LEGEND()
+@enduml
